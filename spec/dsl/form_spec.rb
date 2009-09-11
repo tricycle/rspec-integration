@@ -1,8 +1,16 @@
-require File.dirname(__FILE__) + '/../spec_helper'
-require 'integration_dsl_controller'
+require File.expand_path(File.dirname(__FILE__) + '/../spec_helper')
+
+describe "submit_form", :type => :integration do
+  it 'should submit the form' do
+    get '/form'
+    submit_form :key => 'value'
+    response.should_not be_nil
+  end
+end
 
 describe "submit_form", :type => :controller do
   include Spec::Integration::DSL
+  include Spec::Integration::Matchers
   controller_name :integration_dsl
   
   before do
@@ -10,16 +18,19 @@ describe "submit_form", :type => :controller do
       <form action="/order" id="order_form" method="get"></form>
       <form action="/cancel" id="cancel_form" method="post"></form>
       <form action="/repeat" class="special" method="post"></form>
+      <form action="/upload" id="upload_form" method="post" enctype="multipart/form-data">
+        <input type="file" name="myfile[inhere]" />
+      </form>
     }
   end
   
   it "should find the form having the given id" do
-    should_receive(:post).with("/cancel", {})
+    should_receive(:post).with("/cancel", {}, an_instance_of(Hash))
     submit_form "cancel_form"
   end
   
   it 'should find the form matching the given css selector' do
-    should_receive(:post).with("/repeat", {})
+    should_receive(:post).with("/repeat", {}, an_instance_of(Hash))
     submit_form '.special'
   end
   
@@ -27,13 +38,37 @@ describe "submit_form", :type => :controller do
     response.stub!(:body).and_return %{
       <form action="/single" method="get"></form>
     }
-    should_receive(:get).with('/single', {})
+    should_receive(:get).with('/single', {}, an_instance_of(Hash))
     submit_form
   end
   
   it "should use method of the rendered form" do
-    should_receive(:get).with("/order", {})
+    should_receive(:get).with("/order", {}, an_instance_of(Hash))
     submit_form "order_form"
+  end
+  
+  it 'should use headers when provided' do
+    should_receive(:post).with("/cancel", {}, {:authorization => 'stuff'})
+    submit_form 'cancel_form', {}, :headers => {:authorization => 'stuff'}
+  end
+  
+  it "should not disturb file field values" do
+    test_file = ActionController::TestUploadedFile.new(
+      File.dirname(__FILE__) + "/../spec.opts", "text/plain"
+    )
+    should_receive(:post).with("/upload", {"myfile" => {"inhere" => test_file}}, an_instance_of(Hash))
+    submit_form "upload_form", :myfile => {:inhere => test_file}
+  end
+  
+  it 'should handle values that have special characters' do
+    response.stub!(:body).and_return %{
+      <form action="/special" method="get">
+        <input type="text" name="myfield" />
+        <input type="text" name="mynumber" />
+      </form>
+    }
+    should_receive(:get).with("/special", {'myfield' => "my;special\nstuff", 'mynumber' => '1'}, an_instance_of(Hash))
+    submit_form :myfield => "my;special\nstuff", :mynumber => 1
   end
   
   describe 'hidden fields' do
@@ -59,17 +94,17 @@ describe "submit_form", :type => :controller do
           'overridden' => 'not_from_form'
         }
       }
-      should_receive(:post).with("/hiddens", @expected)
+      should_receive(:post).with("/hiddens", @expected, an_instance_of(Hash))
     end
     
     it 'should be overridden when values are supplied' do
       submit_form :overridden => 'not_from_form', :deeply => {:overridden => 'not_from_form'}
     end
     
-    it 'should remove in an array when overridden' do
-      @expected['deeply'] = {'not_overridden' => ['value'], 'overridden' => 'from_form'}
+    it 'should submit only the values from the override when field is an array' do
+      @expected['deeply'] = {'not_overridden' => ['value1', 'value2'], 'overridden' => 'from_form'}
       @expected['overridden'] = 'from_form'
-      submit_form :deeply => {:not_overridden => ['value']}
+      submit_form :deeply => {:not_overridden => ['value1', 'value2']}
     end
     
     it 'should exclude all but _method when :include_hidden is false' do
@@ -99,9 +134,8 @@ describe 'Expectations about parsing query parameters: ' do
   end
   
   def parse_as(expected)
-    satisfy do |uri|
-      actual = ActionController::AbstractRequest.parse_query_parameters(URI.escape(uri))
-      actual == expected
+    simple_matcher(expected) do |uri|
+      Rack::Utils.parse_nested_query(URI.escape(uri)) == expected
     end
   end
 end

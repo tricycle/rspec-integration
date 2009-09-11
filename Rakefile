@@ -1,9 +1,9 @@
-require 'rubygems'
-gem 'rake'
-require 'rake'
-require 'rake/rdoctask'
+$:.unshift(File.join(File.dirname(__FILE__), 'lib'))
 
-require "#{File.dirname(__FILE__)}/spec/environment"
+require 'rubygems'
+require 'spec/rake/spectask'
+
+task :default => :spec
 
 desc "Run all specs"
 task :spec => ["spec:libs:checkout"] do

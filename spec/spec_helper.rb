@@ -1,29 +1,30 @@
-require File.dirname(__FILE__) + "/../spec/environment"
+SPEC_ROOT = File.expand_path(File.dirname(__FILE__))
+$LOAD_PATH.unshift(SPEC_ROOT) # for application_controller.rb
+ 
+RAILS_ROOT = File.expand_path("#{SPEC_ROOT}/..")
+$LOAD_PATH.unshift("#{RAILS_ROOT}/lib")
 
-unless defined? DATABASE_ADAPTER
-  $: << "#{SPEC_ROOT}"
-  $: << "#{PLUGIN_ROOT}/lib"
-  $: << "#{RSPEC_ROOT}/lib"
-  $: << "#{ACTIONPACK_ROOT}/lib"
-  $: << "#{ACTIVERECORD_ROOT}/lib"
-  $: << "#{ACTIVESUPPORT_ROOT}/lib"
-  $: << "#{RSPEC_ON_RAILS_ROOT}/lib"
+require 'rubygems'
+require 'active_support'
+require 'active_record'
+require 'action_pack'
+require 'action_controller'
+require 'action_mailer'
 
-  require 'active_support'
-  require 'active_record'
-  require 'action_controller'
-  require 'action_view'
-  
-  require 'spec'
-  require 'spec/rails'
-  require 'spec/integration'
-  
-  def fail_with(message)
-    raise_error(Spec::Expectations::ExpectationNotMetError, message)
+require 'rails/version'
+
+require 'spec'
+require 'spec/integration'
+require 'integration_dsl_controller'
+
+ActionController::Routing::Routes.draw do |map|
+  map.with_options :controller => 'integration_dsl' do |dsl|
+    dsl.root
+    dsl.connect '/caching_action', :action => 'caching_action'
+    dsl.connect '/exploding',      :action => 'exploding'
+    dsl.connect '/form',           :action => 'form'
   end
-  
-  require 'logger'
-  RAILS_DEFAULT_LOGGER = Logger.new("#{SUPPORT_TEMP}/test.log")
-  RAILS_DEFAULT_LOGGER.level = Logger::DEBUG
-  ActiveRecord::Base.logger = RAILS_DEFAULT_LOGGER
+  map.connect '/caching/cache_store_params',
+    :controller => 'caching', :action => 'cache_store_params'
 end
+

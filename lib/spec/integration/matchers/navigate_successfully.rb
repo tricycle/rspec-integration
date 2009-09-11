@@ -3,15 +3,15 @@ module Spec
     module Matchers
       
       class NavigateSuccessfully #:nodoc:
-        def initialize(where)
-          @where = where
+        def initialize(example, where)
+          @example, @where = example, where
         end
         
-        def matches?(example)
-          if example.response.error? || example.response.body =~ /Exception caught/
-            @failure_message = extract_exception(example)
-          elsif example.response.missing?
-            @failure_message = "Missing document #{example.request.method}'ing #{@where}"
+        def matches?(response)
+          if response.error? || response.body =~ /Exception caught/
+            @failure_message = extract_exception(@example)
+          elsif response.missing?
+            @failure_message = "Missing document #{@example.request.method}'ing #{@where}"
           end
           @failure_message.nil?
         end
@@ -26,23 +26,32 @@ module Spec
         
         private
           def extract_exception(example)
-            exception = example.controller.rescued_exception
-            message = "Unexpected #{example.response.response_code} error #{example.request.method}'ing #{@where}\n#{exception.message}"
-            if exception.respond_to? :line_number
-              message << "\nOccurred on line #{exception.line_number} in #{exception.file_name}"
+            exception_in_controller_action = example.controller.rescued_exception
+            message = "Unexpected #{example.response.response_code} error #{example.request.method}'ing #{@where}"
+            if exception_in_controller_action
+              message << "\n#{exception_in_controller_action.message}"
+              if exception_in_controller_action.respond_to? :line_number
+                message << "\nOccurred on line #{exception_in_controller_action.line_number} in #{exception_in_controller_action.file_name}"
+              else
+                backtrace = Spec::Runner::QuietBacktraceTweaker.new.tweak_backtrace(exception_in_controller_action)
+                message << "\n#{backtrace * "\n"}"
+              end
             else
-              backtrace = Spec::Runner::QuietBacktraceTweaker.new.tweak_backtrace(example.controller.rescued_exception)
-              message << "\n#{backtrace * "\n"}"
+              if example.response.body =~ %r{<h1>(.*?)</h1>\s*?<pre>(.*?)</pre>}mi
+                first, second = $1, $2
+                message << "\n\n#{first.gsub(/\s+/m, ' ').strip}\n\n#{second}"
+              end
+              message << "\n\n#{$1}" if example.response.body =~ %r{<div id="Full-Trace".*?>\s*?<pre><code>(.*?)</code></pre>\s*</div>}mi
             end
+            message
           end
       end
       
       # Specify that a response should be a good one: successful, not missing,
-      # no server errors, etc. This is used internally by
-      # Spec::Integration::DSL::NavigationExampleMethods, made available to
-      # you for good pleasure.
+      # no server errors, etc.
+      #
       def have_navigated_successfully(where = request.request_uri)
-        NavigateSuccessfully.new(where)
+        NavigateSuccessfully.new(self, where)
       end
       
     end

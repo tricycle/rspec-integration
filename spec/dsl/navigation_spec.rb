@@ -1,7 +1,8 @@
-require File.dirname(__FILE__) + '/../spec_helper'
-require 'integration_dsl_controller'
+require File.expand_path(File.dirname(__FILE__) + '/../spec_helper')
 
-describe Spec::Integration::DSL, "find_anchor", :type => :controller do
+describe "find_anchors", :type => :controller do
+  include Spec::Integration::DSL
+  include Spec::Integration::Matchers
   controller_name :integration_dsl
   
   before do
@@ -9,26 +10,38 @@ describe Spec::Integration::DSL, "find_anchor", :type => :controller do
   end
   
   it "should find the anchor having the given href" do
-    find_anchor('/lala').should_not be_nil
+    find_anchors('/lala').should_not be_nil
   end
   
   it "should violate when count is not as expected" do
     lambda do
-      find_anchor('/lala', :count => 0)
+      find_anchors('/lala', :count => 0)
     end.should raise_error(Spec::Expectations::ExpectationNotMetError)
   end
 end
 
-describe Spec::Integration::DSL, "have_navigated_successfully", :type => :controller do
+describe "have_navigated_successfully", :type => :integration do
+  it "should report the exception in the failure message" do
+    get '/exploding'
+    lambda do
+      response.should have_navigated_successfully
+    end.should raise_error(Spec::Expectations::ExpectationNotMetError, /This will blow up!/)
+  end
+end
+
+describe 'click_on', :type => :controller do
+  include Spec::Integration::DSL
+  include Spec::Integration::Matchers
   controller_name :integration_dsl
   
-  it "should report the exception in the failure message" do
-    with_routing do |set|; set.draw do |map|
-      map.connect ':controller/:action/:id'
-      get :exploding
-      lambda do
-        should have_navigated_successfully
-      end.should fail_with(/This will blow up!/)
-    end; end
+  before do
+    response.stub!(:body).and_return %{
+      <a href="/somewhere">Somewhere</a>
+    }
+  end
+  
+  it 'should forward headers in the request' do
+    should_receive(:get).with('/somewhere', {}, {:authorization => 'stuff'})
+    click_on :link => '/somewhere', :headers => {:authorization => 'stuff'}
   end
 end
